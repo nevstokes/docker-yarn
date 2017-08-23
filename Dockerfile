@@ -1,6 +1,6 @@
 FROM alpine:3.6 AS build
 
-ENV NODE_VERSION 8.3.0
+ENV NODE_VERSION 8.4.0
 ENV YARN_VERSION 0.27.5
 
 RUN set -euxo pipefail \
@@ -54,29 +54,49 @@ RUN curl -fSLO --compressed "https://yarnpkg.com/downloads/$YARN_VERSION/yarn-v$
     && tar -xzf yarn-v$YARN_VERSION.tar.gz -C /opt/yarn --strip-components=1
 
 
-FROM alpine:3.6
-
-ARG BUILD_DATE
-ARG VCS_REF
-ARG VCS_URL
+FROM alpine:3.6 as libs
 
 COPY --from=build /usr/local/bin/node /usr/local/bin/
 COPY --from=build /opt/yarn /opt/yarn
 
 RUN set -euxo pipefail \
     \
+    && echo '@community http://dl-cdn.alpinelinux.org/alpine/edge/community' >> /etc/apk/repositories \
+    && apk --update add upx@community \
+    && scanelf --nobanner --needed /usr/local/bin/node | awk '{ gsub(/,/, "\nso:", $2); print "so:" $2 }' | xargs apk add --no-cache \
+    \
+    && upx -9 /usr/local/bin/node \
+    && apk del --purge apk-tools upx \
+    \
+    && tar -cf lib.tar /lib/*.so.* \
+    && tar -cf usr-lib.tar /usr/lib/*.so.*
+
+
+FROM busybox
+
+ARG BUILD_DATE
+ARG VCS_REF
+ARG VCS_URL
+
+COPY --from=libs /usr/local/bin/node /usr/local/bin/
+COPY --from=libs /opt/yarn /opt/yarn
+COPY --from=libs /*.tar /
+
+RUN set -euxo pipefail \
+    \
     && addgroup -g 1000 -S node \
     && adduser -u 1000 -H -s /sbin/nologin -D -S -G node node \
     \
-    && apk update \
-    && scanelf --nobanner --needed `which node` | awk '{ gsub(/,/, "\nso:", $2); print "so:" $2 }' | xargs apk add --no-cache \
+    && tar -xf /lib.tar \
+    && tar -xf /usr-lib.tar \
     \
-    # Tidy up
-    && rm -rf /var/cache
+    && rm -rf /bin /*.tar
+
+USER node
 
 LABEL org.label-schema.build-date=$BUILD_DATE \
       org.label-schema.schema-version="1.0" \
       org.label-schema.vcs-ref=$VCS_REF \
       org.label-schema.vcs-url=$VCS_URL
 
-ENTRYPOINT ["/opt/yarn/bin/yarn.js"]
+ENTRYPOINT ["/usr/local/bin/node", "/opt/yarn/bin/yarn.js"]
