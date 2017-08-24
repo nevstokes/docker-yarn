@@ -78,6 +78,8 @@ ARG BUILD_DATE
 ARG VCS_REF
 ARG VCS_URL
 
+ENTRYPOINT ["/usr/local/bin/node", "/opt/yarn/bin/yarn.js"]
+
 COPY --from=libs /usr/local/bin/node /usr/local/bin/
 COPY --from=libs /opt/yarn /opt/yarn
 COPY --from=libs /*.tar /
@@ -94,9 +96,9 @@ RUN set -euxo pipefail \
 
 USER node
 
-LABEL org.label-schema.build-date=$BUILD_DATE \
+LABEL maintainer="Nev Stokes <mail@nevstokes.com>" \
+      description="Yarn package manager" \
+      org.label-schema.build-date=$BUILD_DATE \
       org.label-schema.schema-version="1.0" \
       org.label-schema.vcs-ref=$VCS_REF \
       org.label-schema.vcs-url=$VCS_URL
-
-ENTRYPOINT ["/usr/local/bin/node", "/opt/yarn/bin/yarn.js"]
