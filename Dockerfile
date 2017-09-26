@@ -1,17 +1,20 @@
 FROM alpine:3.6 AS build
 
-ENV NODE_VERSION 8.4.0
-ENV YARN_VERSION 0.27.5
+ARG NODE_VERSION
+
+COPY yarn-version.xsl .
 
 RUN set -euxo pipefail \
     \
-    && apk --update add --no-cache \
+    && apk --update add \
         binutils-gold \
         curl \
         g++ \
         gcc \
         gnupg \
         libgcc \
+        libressl \
+        libxslt-dev \
         linux-headers \
         make \
         python \
@@ -47,11 +50,14 @@ RUN set -euxo pipefail \
     \
     && strip --strip-all /usr/local/bin/node
 
-RUN curl -fSLO --compressed "https://yarnpkg.com/downloads/$YARN_VERSION/yarn-v$YARN_VERSION.tar.gz" \
-    && curl -fSLO --compressed "https://yarnpkg.com/downloads/$YARN_VERSION/yarn-v$YARN_VERSION.tar.gz.asc" \
-    && gpg --batch --verify yarn-v$YARN_VERSION.tar.gz.asc yarn-v$YARN_VERSION.tar.gz \
+RUN BASE_URL="https://github.com" \
+    && YARN_URL=`wget -q $BASE_URL/yarnpkg/yarn/releases.atom -O - | xsltproc yarn-version.xsl - | sed -E 's/tag\/(v[0-9.]+)/download\/\1\/yarn-\1.tar.gz/'` \
+    && YARN_SIG="$YARN_URL.asc" \
+    && curl -fSL --compressed -o yarn.tar.gz "$BASE_URL$YARN_URL" \
+    && curl -fSL --compressed -o yarn.tar.gz.asc "$BASE_URL$YARN_SIG" \
+    && gpg --batch --verify yarn.tar.gz.asc yarn.tar.gz \
     && mkdir -p /opt/yarn \
-    && tar -xzf yarn-v$YARN_VERSION.tar.gz -C /opt/yarn --strip-components=1
+    && tar -xzf yarn.tar.gz -C /opt/yarn --strip-components=1
 
 
 FROM alpine:3.6 as libs
